@@ -1,34 +1,30 @@
-# 🌌 Sistema de Análisis Astrofísico Automatizado
+# 🔭 Análisis Astrométrico y Cinemático - Gaia DR3 (ESA)
 
-**Autor:** Kevin Osorio  
-**Materia:** Física Computacional  
-
-Este repositorio contiene una arquitectura completa de extracción, transformación y carga (ETL), junto con visualización interactiva de datos astronómicos reales. El sistema despliega contenedores Docker de forma autónoma para procesar información de dos de los catálogos astronómicos más importantes del mundo: el **NASA Exoplanet Archive** y el **ESA Gaia DR3**.
+Este proyecto es un pipeline de datos automatizado que extrae, procesa y visualiza información astrofísica de la misión **Gaia DR3** de la Agencia Espacial Europea (ESA). El sistema está completamente orquestado con Docker, Python y MySQL.
 
 ## 🚀 Arquitectura del Proyecto
 
-El proyecto está diseñado bajo un enfoque de microservicios y entornos virtuales locales para garantizar la reproducibilidad del código sin romper las dependencias del sistema operativo anfitrión (Linux):
+El sistema se compone de tres fases ejecutadas de forma secuencial y autónoma:
+1. **Infraestructura (Docker):** Creación de una red virtual, un volumen persistente y contenedores para MySQL 8.4 y Jupyter.
+2. **ETL (Python/ADQL):** Consulta asincrónica al servidor TAP de la ESA (`gea.esac.esa.int`) mediante ADQL para extraer las 3,000 estrellas más brillantes. Los datos se normalizan en un esquema relacional padre-hijo y se inyectan en MySQL.
+3. **Dashboard (Streamlit):** Interfaz gráfica interactiva que lee la base de datos relacional para visualizar el posicionamiento ecuatorial, los vectores de movimiento propio y un pseudo Diagrama de Hertzsprung-Russell.
 
-1. **Orquestación (Bash):** Scripts automatizados que limpian el entorno, despliegan una red Docker (`ciencia-net`) y levantan los servicios.
-2. **Almacenamiento (MySQL 8.4):** Contenedor de base de datos que aloja los modelos relacionales asegurando la integridad de los datos (Primary Keys, Foreign Keys).
-3. **Procesamiento ETL (Python):** Script ejecutado *dentro* de un contenedor aislado de Jupyter. Se conecta a las APIs TAP (Table Access Protocol) mediante consultas ADQL/SQL, limpia los DataFrames con Pandas y los inyecta en MySQL usando SQLAlchemy.
-4. **Visualización (Streamlit):** Interfaz gráfica ejecutada en un entorno virtual (`venv`) en la máquina anfitriona, que consume los datos de MySQL y renderiza gráficos científicos interactivos con Plotly.
+## 🗄️ Modelo Relacional
+La base de datos `gaia_db` mantiene la integridad referencial a través de 3 tablas:
+* **`estrella`** (Padre): IDs, coordenadas (RA, Dec) y magnitud aparente.
+* **`cinematica`** (Hijo): Paralaje, movimiento propio y velocidad radial.
+* **`fisica_estelar`** (Hijo): Temperatura efectiva y gravedad superficial.
 
-## 🔭 Módulos Disponibles
-
-### 1. Catálogo de Exoplanetas (NASA)
-Analiza miles de exoplanetas confirmados, comparando métodos de descubrimiento (Tránsito vs. Velocidad Radial), evaluando la 3ra Ley de Kepler y graficando la relación masa-radio de gigantes gaseosos y supertierras.
-
-### 2. Archivo Gaia DR3 (Agencia Espacial Europea)
-Extrae información astrométrica de estrellas brillantes. Incluye un mapa de posicionamiento ecuatorial (RA/Dec), vectores de movimiento propio, distribución de velocidad radial y una aproximación empírica al Diagrama Hertzsprung-Russell.
+## 🛠️ Tecnologías Utilizadas
+* **Base de Datos & Contenedores:** Docker, MySQL 8.4
+* **Procesamiento de Datos:** Python 3, Pandas, Requests, SQLAlchemy
+* **Visualización Frontend:** Streamlit, Plotly Express
 
 ## ⚙️ Instrucciones de Ejecución
-
-Para evaluar este proyecto, solo es necesario ejecutar el script maestro interactivo. Abre una terminal y ejecuta:
+Para desplegar el proyecto desde cero en cualquier distribución Linux, simplemente ejecute el script orquestador:
 
 ```bash
-chmod +x ejecutar_proyecto.sh
-./ejecutar_proyecto.sh
-```
+chmod +x instalar_gaia.sh
+./instalar_gaia.sh
 
 El script se encargará de clonar el repositorio, instalar las dependencias necesarias de forma segura y le permitirá elegir qué entorno analítico desea desplegar.
