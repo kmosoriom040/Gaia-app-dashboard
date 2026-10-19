@@ -12,13 +12,17 @@ import pandas as pd
 import numpy as np
 import mysql.connector
 import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
-st.set_page_config(page_title="Archivo Gaia DR3", page_icon="🔭", layout="wide")
+st.set_page_config(page_title="Análisis Gaia DR3", page_icon="🔭", layout="wide")
 
+# --- CONEXIÓN Y EXTRACCIÓN ---
 @st.cache_resource
 def init_connection():
     return mysql.connector.connect(
-        host="localhost", # Mantener en localhost para pruebas locales
+        host="localhost", 
         port=3306,
         user="root",
         password="root",
@@ -39,98 +43,135 @@ def load_data():
     """
     df = pd.read_sql(query, conn)
     
-    # --- CÁLCULOS FÍSICOS AVANZADOS ---
-    # 1. Filtrar paralajes negativos o nulos (errores instrumentales)
+    # 1. Filtro de ruido instrumental
     df = df[df['paralaje'] > 0].copy()
     
-    # 2. Calcular distancia en Pársecs (Paralaje está en milisegundos de arco - mas)
+    # 2. Cálculos Espaciales (Distancia y Cartesianas)
     df['distancia_pc'] = 1000 / df['paralaje']
-    
-    # 3. Transformación a coordenadas Cartesianas (X, Y, Z) centradas en el Sol
     ra_rad = np.radians(df['ra'])
     dec_rad = np.radians(df['dec'])
-    
     df['x'] = df['distancia_pc'] * np.cos(dec_rad) * np.cos(ra_rad)
     df['y'] = df['distancia_pc'] * np.cos(dec_rad) * np.sin(ra_rad)
     df['z'] = df['distancia_pc'] * np.sin(dec_rad)
+    
+    # 3. Cálculo de Astrofísica Teórica (Módulo de distancia)
+    # Magnitud Absoluta: M = m - 5*log10(d) + 5
+    df['magnitud_abs'] = df['magnitud_g'] - 5 * np.log10(df['distancia_pc']) + 5
     
     return df
 
 df = load_data()
 
-st.sidebar.title("🔭 Navegación Gaia DR3")
+# --- SIDEBAR ---
+st.sidebar.title("🔭 Pipeline Gaia DR3")
+st.sidebar.markdown("**Análisis Computacional Estelar**")
 modulo = st.sidebar.radio(
-    "Módulos Analíticos:", 
-    ["Visión General (Astrometría)", "Cinemática Estelar", "Física (Diagrama H-R)", "Cartografía Galáctica 3D"]
+    "Seleccione el motor de análisis:", 
+    [
+        "1. Mapeo y Cartografía 3D", 
+        "2. Cinemática Vectorial", 
+        "3. Termodinámica (HR Real)", 
+        "4. Machine Learning (Clustering)"
+    ]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info(f"Analizando {len(df):,} estrellas depuradas.")
+st.sidebar.metric("Volumen de Datos", f"{len(df):,} estrellas")
+st.sidebar.metric("Distancia Máxima", f"{df['distancia_pc'].max():.2f} pc")
 
-if modulo == "Visión General (Astrometría)":
-    st.title("Distribución Espacial de Estrellas")
-    st.markdown("Mapa del cielo basado en la Ascensión Recta (RA) y Declinación (Dec).")
+# --- MÓDULOS ---
+
+if modulo == "1. Mapeo y Cartografía 3D":
+    st.title("Topología 3D e Invarianza Espacial")
+    st.markdown("Transformación métrica euclidiana del vecindario solar. El origen $(0,0,0)$ corresponde a nuestro Sistema Solar.")
     
-    fig_sky = px.scatter(
-        df, x="ra", y="dec", color="magnitud_g",
-        hover_name="source_id", color_continuous_scale="Viridis_r",
-        labels={"ra": "Ascensión Recta (deg)", "dec": "Declinación (deg)", "magnitud_g": "Magnitud Aparente (G)"},
-        title="Posicionamiento Ecuatorial"
-    )
-    st.plotly_chart(fig_sky, use_container_width=True)
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.markdown("### Coordenadas Ecuatoriales (2D)")
+        fig_sky = px.scatter(
+            df, x="ra", y="dec", color="distancia_pc",
+            color_continuous_scale="Cividis",
+            labels={"ra": "RA (°)", "dec": "Dec (°)", "distancia_pc": "Distancia (pc)"}
+        )
+        fig_sky.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0))
+        st.plotly_chart(fig_sky, use_container_width=True)
+        
+    with col2:
+        st.markdown("### Vecindario Galáctico (3D)")
+        fig_3d = px.scatter_3d(
+            df, x='x', y='y', z='z', color='temperatura',
+            hover_name='source_id', color_continuous_scale='Plasma',
+            labels={'x': 'X (pc)', 'y': 'Y (pc)', 'z': 'Z (pc)', 'temperatura': 'Temp (K)'}
+        )
+        fig_3d.update_traces(marker=dict(size=2.5))
+        fig_3d.update_layout(height=600, scene=dict(bgcolor="black"), margin=dict(l=0, r=0, t=0, b=0))
+        st.plotly_chart(fig_3d, use_container_width=True)
 
-elif modulo == "Cinemática Estelar":
-    st.title("Movimiento Propio y Velocidad Radial")
-    st.markdown("Análisis vectorial de cómo se desplazan las estrellas en el plano celeste.")
+elif modulo == "2. Cinemática Vectorial":
+    st.title("Dinámica Espacial y Velocidades")
     
     col1, col2 = st.columns(2)
     with col1:
-        fig_pm = px.scatter(
-            df, x="mov_propio_ra", y="mov_propio_dec", color="vel_radial",
-            color_continuous_scale="RdBu_r",
-            labels={"mov_propio_ra": "PM RA (mas/yr)", "mov_propio_dec": "PM Dec (mas/yr)"},
-            title="Vector de Movimiento Propio"
-        )
+        st.markdown("### Dispersión de Movimiento Propio")
+        st.markdown("Tensor del desplazamiento angular anual en la bóveda celeste.")
+        fig_pm = px.density_contour(df, x="mov_propio_ra", y="mov_propio_dec")
+        fig_pm.add_trace(px.scatter(df, x="mov_propio_ra", y="mov_propio_dec", color="vel_radial", color_continuous_scale="RdBu_r", opacity=0.6).data[0])
         st.plotly_chart(fig_pm, use_container_width=True)
+        
     with col2:
-        fig_vr = px.histogram(
-            df, x="vel_radial", nbins=50,
-            title="Distribución de Velocidad Radial",
-            color_discrete_sequence=["#FF4B4B"]
-        )
+        st.markdown("### Distribución Probabilística (Vel. Radial)")
+        st.markdown("Evaluación estadística del corrimiento al rojo/azul (efecto Doppler).")
+        fig_vr = px.violin(df, y="vel_radial", box=True, points="all", color_discrete_sequence=["#00CC96"])
+        fig_vr.update_layout(yaxis_title="Velocidad Radial (km/s)")
         st.plotly_chart(fig_vr, use_container_width=True)
 
-elif modulo == "Física (Diagrama H-R)":
-    st.title("Termodinámica: Aproximación al Diagrama H-R")
-    st.markdown("Relación entre la temperatura superficial y la gravedad (log g). Agregamos densidad de contornos para identificar aglomeraciones (Secuencia Principal).")
-    
-    # Mejora: Gráfico de densidad (KDE) combinado con scatter
-    fig_hr = px.density_contour(
-        df, x="temperatura", y="gravedad", 
-        title="Diagrama de Densidad Estelar H-R"
-    )
-    fig_hr.add_trace(px.scatter(df, x="temperatura", y="gravedad", color="magnitud_g", opacity=0.5).data[0])
-    
-    fig_hr.update_xaxes(autorange="reversed")
-    fig_hr.update_yaxes(autorange="reversed")
-    
-    st.plotly_chart(fig_hr, use_container_width=True)
-
-elif modulo == "Cartografía Galáctica 3D":
-    st.title("Topología 3D del Vecindario Estelar")
+elif modulo == "3. Termodinámica (HR Real)":
+    st.title("Diagrama Hertzsprung-Russell Calibrado")
     st.markdown("""
-    Transformación de coordenadas ecuatoriales y paralaje a un espacio métrico euclidiano. 
-    Las distancias están dadas en Pársecs ($d = 1000/p$). El centro de coordenadas $(0,0,0)$ representa nuestro Sistema Solar.
+    Al aplicar el **módulo de distancia** a la fotometría cruda, obtenemos la Luminosidad Intrínseca (Magnitud Absoluta). 
+    Esto nos permite revelar la verdadera estructura evolutiva de las estrellas, aislando la Secuencia Principal de la rama de Gigantes Rojas.
     """)
     
-    fig_3d = px.scatter_3d(
-        df, x='x', y='y', z='z',
-        color='temperatura',
-        hover_name='source_id',
-        color_continuous_scale='Plasma',
-        labels={'x': 'X (Pársecs)', 'y': 'Y (Pársecs)', 'z': 'Z (Pársecs)', 'temperatura': 'Temp (K)'},
-        title="Vecindario Solar (Coordenadas Cartesianas)"
+    fig_hr = px.scatter(
+        df, x="temperatura", y="magnitud_abs", color="gravedad",
+        hover_name="source_id", color_continuous_scale="Spectral",
+        labels={"temperatura": "Temperatura Efectiva (K)", "magnitud_abs": "Magnitud Absoluta ($M_G$)", "gravedad": "Log g"}
     )
-    fig_3d.update_traces(marker=dict(size=3))
-    fig_3d.update_layout(scene=dict(bgcolor="black"))
-    st.plotly_chart(fig_3d, use_container_width=True)
+    # Temperatura de mayor a menor y magnitud invertida (brillantes arriba)
+    fig_hr.update_xaxes(autorange="reversed")
+    fig_hr.update_yaxes(autorange="reversed")
+    fig_hr.update_layout(height=650)
+    st.plotly_chart(fig_hr, use_container_width=True)
+
+elif modulo == "4. Machine Learning (Clustering)":
+    st.title("Clasificación Estelar No Supervisada")
+    st.markdown("Aplicación del algoritmo **K-Means** sobre el espacio dimensional `(Temperatura, Magnitud Absoluta)` para descubrir poblaciones estelares sin etiquetado previo.")
+    
+    # Selector interactivo de clusters
+    n_clusters = st.slider("Hiperparámetro: Número de Clusters (k)", min_value=2, max_value=6, value=3)
+    
+    # Preparación de datos para ML
+    ml_data = df.dropna(subset=['temperatura', 'magnitud_abs']).copy()
+    X = ml_data[['temperatura', 'magnitud_abs']]
+    
+    # Estandarización de varianza
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    # Entrenamiento del modelo
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init='auto')
+    ml_data['Cluster'] = kmeans.fit_predict(X_scaled)
+    ml_data['Cluster'] = ml_data['Cluster'].astype(str)
+    
+    # Visualización de las clasificaciones de la red
+    fig_ml = px.scatter(
+        ml_data, x="temperatura", y="magnitud_abs", color="Cluster",
+        color_discrete_sequence=px.colors.qualitative.Bold,
+        title=f"Segmentación K-Means (k={n_clusters})"
+    )
+    fig_ml.update_xaxes(autorange="reversed")
+    fig_ml.update_yaxes(autorange="reversed")
+    fig_ml.update_layout(height=600)
+    
+    st.plotly_chart(fig_ml, use_container_width=True)
+    st.success(f"El modelo convergió agrupando {len(ml_data)} estrellas en {n_clusters} poblaciones morfofísicas distintas.")
