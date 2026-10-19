@@ -9,6 +9,7 @@ Original file is located at
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import mysql.connector
 import plotly.express as px
 
@@ -17,7 +18,7 @@ st.set_page_config(page_title="Archivo Gaia DR3", page_icon="🔭", layout="wide
 @st.cache_resource
 def init_connection():
     return mysql.connector.connect(
-        host="localhost", # Localhost porque corre en tu máquina anfitriona
+        host="localhost", # Mantener en localhost para pruebas locales
         port=3306,
         user="root",
         password="root",
@@ -28,7 +29,7 @@ def init_connection():
 def load_data():
     conn = init_connection()
     query = """
-        SELECT
+        SELECT 
             e.source_id, e.ra, e.dec, e.magnitud_g,
             c.paralaje, c.mov_propio_ra, c.mov_propio_dec, c.vel_radial,
             f.temperatura, f.gravedad
@@ -36,20 +37,40 @@ def load_data():
         JOIN cinematica c ON e.id_estrella = c.id_estrella
         JOIN fisica_estelar f ON e.id_estrella = f.id_estrella
     """
-    return pd.read_sql(query, conn)
+    df = pd.read_sql(query, conn)
+    
+    # --- CÁLCULOS FÍSICOS AVANZADOS ---
+    # 1. Filtrar paralajes negativos o nulos (errores instrumentales)
+    df = df[df['paralaje'] > 0].copy()
+    
+    # 2. Calcular distancia en Pársecs (Paralaje está en milisegundos de arco - mas)
+    df['distancia_pc'] = 1000 / df['paralaje']
+    
+    # 3. Transformación a coordenadas Cartesianas (X, Y, Z) centradas en el Sol
+    ra_rad = np.radians(df['ra'])
+    dec_rad = np.radians(df['dec'])
+    
+    df['x'] = df['distancia_pc'] * np.cos(dec_rad) * np.cos(ra_rad)
+    df['y'] = df['distancia_pc'] * np.cos(dec_rad) * np.sin(ra_rad)
+    df['z'] = df['distancia_pc'] * np.sin(dec_rad)
+    
+    return df
 
 df = load_data()
 
 st.sidebar.title("🔭 Navegación Gaia DR3")
-modulo = st.sidebar.radio("Módulos Analíticos:", ["Visión General (Astrometría)", "Cinemática Estelar", "Física (Diagrama H-R)"])
+modulo = st.sidebar.radio(
+    "Módulos Analíticos:", 
+    ["Visión General (Astrometría)", "Cinemática Estelar", "Física (Diagrama H-R)", "Cartografía Galáctica 3D"]
+)
 
 st.sidebar.markdown("---")
-st.sidebar.info(f"Mostrando {len(df):,} estrellas del catálogo.")
+st.sidebar.info(f"Analizando {len(df):,} estrellas depuradas.")
 
 if modulo == "Visión General (Astrometría)":
     st.title("Distribución Espacial de Estrellas")
     st.markdown("Mapa del cielo basado en la Ascensión Recta (RA) y Declinación (Dec).")
-
+    
     fig_sky = px.scatter(
         df, x="ra", y="dec", color="magnitud_g",
         hover_name="source_id", color_continuous_scale="Viridis_r",
@@ -61,7 +82,7 @@ if modulo == "Visión General (Astrometría)":
 elif modulo == "Cinemática Estelar":
     st.title("Movimiento Propio y Velocidad Radial")
     st.markdown("Análisis vectorial de cómo se desplazan las estrellas en el plano celeste.")
-
+    
     col1, col2 = st.columns(2)
     with col1:
         fig_pm = px.scatter(
@@ -81,16 +102,35 @@ elif modulo == "Cinemática Estelar":
 
 elif modulo == "Física (Diagrama H-R)":
     st.title("Termodinámica: Aproximación al Diagrama H-R")
-    st.markdown("Relación entre la temperatura superficial y la gravedad (log g) de la estrella.")
-
-    fig_hr = px.scatter(
-        df, x="temperatura", y="gravedad", color="magnitud_g",
-        hover_name="source_id", color_continuous_scale="Plasma",
-        labels={"temperatura": "Temperatura Efectiva (K)", "gravedad": "Gravedad Superficial (log g)"},
-        title="Diagrama Temperatura vs Gravedad"
+    st.markdown("Relación entre la temperatura superficial y la gravedad (log g). Agregamos densidad de contornos para identificar aglomeraciones (Secuencia Principal).")
+    
+    # Mejora: Gráfico de densidad (KDE) combinado con scatter
+    fig_hr = px.density_contour(
+        df, x="temperatura", y="gravedad", 
+        title="Diagrama de Densidad Estelar H-R"
     )
-    # Invertimos los ejes para simular un diagrama HR real (más caliente a la izquierda, menos gravedad arriba)
+    fig_hr.add_trace(px.scatter(df, x="temperatura", y="gravedad", color="magnitud_g", opacity=0.5).data[0])
+    
     fig_hr.update_xaxes(autorange="reversed")
     fig_hr.update_yaxes(autorange="reversed")
-
+    
     st.plotly_chart(fig_hr, use_container_width=True)
+
+elif modulo == "Cartografía Galáctica 3D":
+    st.title("Topología 3D del Vecindario Estelar")
+    st.markdown("""
+    Transformación de coordenadas ecuatoriales y paralaje a un espacio métrico euclidiano. 
+    Las distancias están dadas en Pársecs ($d = 1000/p$). El centro de coordenadas $(0,0,0)$ representa nuestro Sistema Solar.
+    """)
+    
+    fig_3d = px.scatter_3d(
+        df, x='x', y='y', z='z',
+        color='temperatura',
+        hover_name='source_id',
+        color_continuous_scale='Plasma',
+        labels={'x': 'X (Pársecs)', 'y': 'Y (Pársecs)', 'z': 'Z (Pársecs)', 'temperatura': 'Temp (K)'},
+        title="Vecindario Solar (Coordenadas Cartesianas)"
+    )
+    fig_3d.update_traces(marker=dict(size=3))
+    fig_3d.update_layout(scene=dict(bgcolor="black"))
+    st.plotly_chart(fig_3d, use_container_width=True)
