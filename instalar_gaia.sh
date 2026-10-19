@@ -43,7 +43,7 @@ source gaia_venv/bin/activate
 
 # 5. Instalar dependencias del frontend
 echo "[*] Instalando dependencias locales para la interfaz gráfica..."
-pip install pandas mysql-connector-python streamlit plotly
+pip install pandas mysql-connector-python streamlit plotly scikit-learn
 
 # 6. Levantar el dashboard
 echo ""
