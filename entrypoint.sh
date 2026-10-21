@@ -3,7 +3,7 @@ set -e
 export DB_HOST="${DB_HOST:-mysql84}"
 
 echo "[*] Esperando a MySQL en $DB_HOST..."
-until python -c "import os,mysql.connector as m; m.connect(host=os.environ['DB_HOST'],user='root',password='root',database='gaia_db')" 2>/dev/null; do
+until python -c "import os,mysql.connector as m; m.connect(host=os.environ['DB_HOST'],user='root',password='root')" 2>/dev/null; do
   sleep 3
 done
 
