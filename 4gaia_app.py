@@ -1,3 +1,4 @@
+import os
 # -*- coding: utf-8 -*-
 """4gaia_app
 
@@ -22,7 +23,7 @@ st.set_page_config(page_title="Análisis Gaia DR3", page_icon="🔭", layout="wi
 @st.cache_resource
 def init_connection():
     return mysql.connector.connect(
-        host="localhost", 
+        host=os.getenv("DB_HOST", "localhost"),
         port=3306,
         user="root",
         password="root",
