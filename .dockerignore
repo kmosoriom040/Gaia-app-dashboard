@@ -1,0 +1,4 @@
+.git
+gaia_venv
+__pycache__
+*.ipynb
