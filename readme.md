@@ -20,6 +20,22 @@ El pipeline se ejecuta secuencialmente mediante orquestación en contenedores:
 * **Procesamiento & ML:** Python 3, Pandas, NumPy, Scikit-Learn.
 * **Visualización:** Streamlit, Plotly (3D & Density).
 
+#### Ejecutar con Docker
+
+Requisitos: Docker y Docker Compose.
+
+    git clone https://github.com/kmosoriom040/Gaia-app-dashboard.git
+    cd Gaia-app-dashboard
+    docker compose up
+
+Abrir http://localhost:8502 (la primera vez el ETL descarga los datos desde la ESA y puede tardar varios minutos).
+Streamlit mostrara el puerto 8501 en su log, es el puerto interno del contenedor.
+
+Para detener: `docker compose down` (agregar `-v` para borrar tambien la base de datos).
+
+Imagen en Docker Hub:
+
+    docker pull kmosorio40/gaia-dashboard:v1.0
 ---
 
 # 🔭 Astrophysical Analysis & Machine Learning - Gaia DR3 (ESA)
